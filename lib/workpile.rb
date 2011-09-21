@@ -1,0 +1,150 @@
+require "workpile/version"
+
+require 'thread'
+
+# 同じ子プロセスを複数作成
+# コマンド送信
+#
+# useage: 
+# wpcl = Workpile.client(3, "ruby server.rb")
+#
+# wpcl.async_select_loop do |worker, io|
+#   puts "#{worker.index} > #{io.gets}"
+# end
+module Workpile
+  def self.client(worker_process_num, cmd)
+    Client.new(worker_process_num, cmd)
+  end
+
+  class Client
+    attr_accessor :workers
+    
+    # worker_process_num 子プロセスの数
+    # cmd 子プロセスコマンド
+    def initialize(worker_process_num, cmd)
+      @queue = Queue.new
+      @workers = worker_process_num.times.map { |i| Worker.new(i, cmd, @queue) }
+      @workers.each { |wk| wk.start }
+    end
+
+    # 子プロセスにコマンド送信
+    def push(s)
+      @queue.push s
+    end
+    
+    # 子プロセスからの stdout 待ち合わせ
+    def select(&block)
+      current_io = @workers.map{|cn| cn.read_pipe }
+      r = IO.select(current_io)
+      ret = nil
+      if r
+        ret = r[0].map do |io|
+          {:worker => @workers.find{|f| f.read_pipe == io }, :io=>io }
+        end
+      end
+      if ret and block
+        ret.each{ |ret_one| block.call(ret_one[:worker].index, ret_one[:io]) }
+      end
+      ret
+    end
+
+    # 全ての子プロセスからの stdout 待ち合わせループ処理
+    # ブロック必須。
+    # ブロック引数 |index, io|
+    #   index ワーカーのインデックス
+    #   io 読み込み可能になったIO
+    def async_select_loop(&block)
+      Thread.new do
+        loop do
+          self.select { |index, io| block.call(index, io) }
+        end
+      end
+    end
+
+    # 現在、コマンドを受け付けて処理実行中のワーカー一覧
+    def processing_wokers
+      @workers.select{|wk| wk.status == :processing }
+    end
+  end
+
+  # 子プロセス１つを管理するクラス
+  class Worker
+    attr_accessor :read_pipe, :status, :index
+  
+    # index 子プロセスインデックス
+    # cmd 実行コマンド
+    # que 各Workerクラスで、共通で参照するコマンドキュー。
+    def initialize(index, cmd, que)
+      super()
+      @index = index
+      @queue = que
+      @cmd = cmd
+      @read_pipe, @write_pipe = *IO.pipe
+      update_status(:initialized)
+      _async_push_watch_loop
+    end
+
+    # 子プロセスへ直接コマンド送信
+    def push(str)
+      @popen_pipe.puts str
+    end
+
+    # 状態を更新する
+    def update_status(status)
+      @status = status
+    end
+
+    # 子プロセスを開始する
+    def start
+      update_status(:started)
+      Thread.new do
+        loop do
+          _boot
+          _io_loop
+          _close
+        end
+      end
+    end
+
+private
+    def _boot
+      update_status(:booting)
+      @popen_pipe = IO.popen(@cmd, "r+")
+    end
+
+    def _analize_workpile_cmd(s)
+      if s =~ /^workpilecmd :(.*)/
+        case $1
+        when "booting"
+          update_status(:boot_wait)
+        when "ready"
+          update_status(:ready)
+        end
+      end
+    end
+
+    def _io_loop
+      while s = @popen_pipe.gets
+        _analize_workpile_cmd(s)
+        @write_pipe.puts s
+      end
+    end
+    
+    def _close
+      @popen_pipe.close
+      @popen_pipe = nil
+    end
+    
+    def _async_push_watch_loop
+      Thread.new do
+        loop do
+          dt = @queue.pop
+          if @popen_pipe
+            @popen_pipe.puts dt
+            update_status(:processing)
+          end
+        end
+      end
+    end
+  end
+end
