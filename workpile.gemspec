@@ -8,8 +8,8 @@ Gem::Specification.new do |s|
   s.authors     = ["drvo"]
   s.email       = ["drvo.gm@gmail.com"]
   s.homepage    = ""
-  s.summary     = %q{TODO: Write a gem summary}
-  s.description = %q{TODO: Write a gem description}
+  s.summary     = %q{pipe manage subprocess}
+  s.description = %q{create subprocess by pipe. manage that.}
 
   s.rubyforge_project = "workpile"
 
