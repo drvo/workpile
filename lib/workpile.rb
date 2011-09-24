@@ -56,7 +56,11 @@ module Workpile
     def async_select_loop(&block)
       Thread.new do
         loop do
-          self.select { |index, io| block.call(index, io) }
+          self.select { |index, io|
+            Thread.critical=true # なぜかとまってしまう現象が発生した。その対応を常に入れておくことにしました。
+            block.call(index, io)
+            Thread.critical=false # なぜかとまってしまう現象が発生した。その対応を常に入れておくことにしました。
+          }
         end
       end
     end
