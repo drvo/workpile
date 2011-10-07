@@ -2,6 +2,8 @@ require "workpile/version"
 
 require 'thread'
 
+
+
 # 同じ子プロセスを複数作成
 # コマンド送信
 #
@@ -12,7 +14,19 @@ require 'thread'
 #   puts "#{worker.index} > #{io.gets}"
 # end
 module Workpile
+  @read_pipe, @write_pipe = *IO.pipe
+  
+  def self.write_pipe
+    p @write_pipe
+    @write_pipe
+  end
+  def self.read_pipe
+    p @read_pipe
+    @read_pipe
+  end
+  
   def self.client(worker_process_num, cmd)
+    p @read_pipe
     Client.new(worker_process_num, cmd)
   end
 
@@ -23,7 +37,7 @@ module Workpile
     # cmd 子プロセスコマンド
     def initialize(worker_process_num, cmd)
       @queue = Queue.new
-      @workers = worker_process_num.times.map { |i| Worker.new(i, cmd, @queue) }
+      @workers = worker_process_num.times.map { |i| Worker.new(i, cmd, @queue, Workpile.write_pipe) }
       Thread.new do
         Thread.current.abort_on_exception = true
         @workers.each { |wk|
@@ -43,8 +57,7 @@ module Workpile
     
     # 子プロセスからの stdout 待ち合わせ
     def select(&block)
-      current_io = @workers.map{|cn| cn.read_pipe }
-      r = IO.select(current_io)
+      r = IO.select([Workpile.read_pipe])
       Thread.pass
       ret = nil
       if r
@@ -69,9 +82,9 @@ module Workpile
         Thread.current.abort_on_exception = true
         loop do
           self.select { |index, io|
-            Thread.critical=true # なぜかとまってしまう現象が発生した。その対応を常に入れておくことにしました。
+            #Thread.critical=true # なぜかとまってしまう現象が発生した。その対応を常に入れておくことにしました。
             block.call(index, io)
-            Thread.critical=false # なぜかとまってしまう現象が発生した。その対応を常に入れておくことにしました。
+            #Thread.critical=false # なぜかとまってしまう現象が発生した。その対応を常に入れておくことにしました。
             Thread.pass
           }
         end
@@ -86,17 +99,17 @@ module Workpile
 
   # 子プロセス１つを管理するクラス
   class Worker
-    attr_accessor :read_pipe, :status, :index
+    attr_accessor :status, :index
   
     # index 子プロセスインデックス
     # cmd 実行コマンド
     # que 各Workerクラスで、共通で参照するコマンドキュー。
-    def initialize(index, cmd, que)
+    def initialize(index, cmd, que, write_pipe)
       super()
       @index = index
       @queue = que
       @cmd = cmd
-      @read_pipe, @write_pipe = *IO.pipe
+      @write_pipe = write_pipe
       update_status(:initialized)
       _async_push_watch_loop
     end

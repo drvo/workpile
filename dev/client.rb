@@ -1,7 +1,7 @@
 require 'workpile'
 Thread.abort_on_exception
 
-wpcl = Workpile.client(3, "ruby server.rb")
+wpcl = Workpile.client(3, "ruby -I./lib dev/server.rb")
 
 wpcl.async_select_loop do |index, io|
   puts "#{index} > #{io.gets}"
