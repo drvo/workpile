@@ -66,12 +66,12 @@ module Workpile
     def initialize(index = ARGV.pop, uri = ARGV.pop)
       @index = index
       @service = DRbObject.new_with_uri(uri)
-      @service.boot_pids << Process.pid
+      @service.boot_pids.push Process.pid
     end
     
     def wait_request
       req = @service.pop
-      @service.working_pids << Process.pid
+      @service.working_pids.push Process.pid
       at_exit do
         @service.working_pids -= [Process.pid]
         @service.boot_pids -= [Process.pid]
