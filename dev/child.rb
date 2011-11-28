@@ -1,4 +1,3 @@
-require 'rubygems'
 require 'workpile'
 cl = Workpile::Child.new
 

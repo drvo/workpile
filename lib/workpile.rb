@@ -1,11 +1,9 @@
 require 'drb/drb'
 module Workpile
   class Service
-    attr_accessor :boot_pids, :working_pids
-
     def initialize
       @queue = Queue.new
-      @working_pids = []
+      @pids = []
       @boot_pids = []
     end
     
@@ -17,19 +15,34 @@ module Workpile
       @queue.push obj
     end
     
-    def kill_working_children
-      p @working_pids
-      return if @working_pids.empty?
-      s1 = @working_pids.map{|pid| " /PID #{pid} " }
-      IO.popen("start /b taskkill /F #{s1}")
-      @working_pids.clear
+    def add_working_client(pid)
+      @pids << pid
+    end
+
+    def remove_working_client(pid)
+      @pids -= [pid]
     end
     
-    def kill
+    def add_boot_client(pid)
+      @boot_pids << pid
+    end
+
+    def remove_boot_client(pid)
+      @boot_pids -= [pid]
+    end
+    
+    def kill_working_children
+      return if @pids.empty?
+      s1 = @pids.map{|pid| " /PID #{pid} " }
+      IO.popen("start /b taskkill /F #{s1}")
+      @pids.clear
+    end
+    
+    def kill_boot_children
+      return if @boot_pids.empty?
       s1 = @boot_pids.map{|pid| " /PID #{pid} " }
       IO.popen("start /b taskkill /F #{s1}")
       @boot_pids.clear
-      @pids.clear
     end
   end
 
@@ -37,18 +50,19 @@ module Workpile
     def initialize
       @service = Service.new
       DRb.start_service('druby://127.0.0.1:0',@service)
+      @threads = []
     end
     
     def request(obj)
       @service.push obj
     end
-    
+
     def spawn_children(n, cmd)
       n.times.map do |index|
-        Thread.new do
-          loop {
+        @threads << Thread.new do
+          while !@abort 
             system("#{cmd} #{DRb.uri} #{index}")
-          }
+          end
         end
       end
     end
@@ -57,8 +71,10 @@ module Workpile
       @service.kill_working_children
     end
     
-    def kill
-      @service.kill
+    def abort
+      @abort = true
+      @service.kill_boot_children
+      @threads.each{ |th| th.join }
     end
   end
 
@@ -67,15 +83,15 @@ module Workpile
     def initialize(index = ARGV.pop, uri = ARGV.pop)
       @index = index
       @service = DRbObject.new_with_uri(uri)
-      @service.boot_pids.push Process.pid
+      @service.add_boot_client(Process.pid)
     end
     
     def wait_request
       req = @service.pop
-      @service.working_pids.push Process.pid
+      @service.add_working_client(Process.pid)
       at_exit do
-        @service.working_pids -= [Process.pid]
-        @service.boot_pids -= [Process.pid]
+        @service.remove_working_client(Process.pid)
+        @service.remove_boot_client(Process.pid)
       end
       req
     end
