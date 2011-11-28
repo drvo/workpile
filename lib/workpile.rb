@@ -18,6 +18,7 @@ module Workpile
     end
     
     def kill_working_children
+      p @working_pids
       return if @working_pids.empty?
       s1 = @working_pids.map{|pid| " /PID #{pid} " }
       IO.popen("start /b taskkill /F #{s1}")
