@@ -66,15 +66,18 @@ module Workpile
         end
       end
     end
-
+    
     def kill_working_children
       @service.kill_working_children
     end
     
     def abort
       @abort = true
-      @service.kill_boot_children
-      @threads.each{ |th| th.join }
+      @threads.each do |th|
+        if not th.join(5)
+          @service.kill_boot_children
+        end
+      end
     end
   end
 
