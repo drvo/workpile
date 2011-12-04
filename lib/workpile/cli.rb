@@ -1,6 +1,9 @@
 require "rubygems"
 require "fssm"
 
+$stdout.sync = true
+Thread.abort_on_exception = true
+
 require 'workpile'
 class FSSMGuard
   def initialize
@@ -28,7 +31,7 @@ class FSSMGuard
   def event(base, relative)
     @watch.keys.each do |regexp|
       if m = ( relative.match(regexp) )
-        invoke @watch[regexp].call(m)
+        invoke(@watch[regexp] ? @watch[regexp].call(m) : relative)
       end
     end
   end

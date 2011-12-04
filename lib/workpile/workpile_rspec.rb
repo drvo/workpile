@@ -33,18 +33,14 @@ end
 
 puts "ready"
 
-src = ""
-loop do
-  str = cl.wait_request
+str = cl.wait_request
 
-  args = str.split(" ")
-  src = args[-1]
+args = str.split(" ")
+src = args[-1]
 
-  if File.exists?(src)
-    break
-  else
-    puts "Spec File Not Find(#{src})"
-  end
+if not File.exists?(src)
+  puts "Spec File Not Find(#{src})"
+  exit
 end
 
 case src
