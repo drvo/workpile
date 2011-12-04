@@ -33,6 +33,7 @@ end
 
 puts "ready"
 
+src = ""
 loop do
   str = cl.wait_request
 
