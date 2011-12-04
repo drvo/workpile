@@ -53,6 +53,7 @@ class RSpecGuard < FSSMGuard
   end
   
   def on_exit
+    puts "workpile process shutdown..."
     @parent.abort
   end
 end
